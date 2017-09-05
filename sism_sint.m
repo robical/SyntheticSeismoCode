@@ -1,0 +1,89 @@
+%% Sismogramma sintetico
+
+addpath('/geodata10/pintus/MYLibrary/Matlab_Lib/Geofisica/'),
+addpath('/geodata10/calandrini/Codice_Matlab/Qfactor_CSG/'),
+addpath('/geoscratch/workgroup/Local_Attributes/Software/Matlab/Attributi_codici'),
+addpath('/geoscratch/workgroup/Local_Attributes/Software/Matlab/Q_factor_codici')
+
+%Definizione dei parametri del mezzo nel file: parameters.mat
+%
+% 1 riga: velocità a partire dallo strato superficiale
+% 2 riga: minimo_offset:group_interval:massimo_offset
+% 3 riga: spessori a partire dallo strato superficiale
+% 4 riga: Q factore nel primo elemento, zeri a riempire
+
+%load -ASCII parameters.mat,
+
+%Source Parameters
+fc=200;
+fdom=30;
+dt=1/fc;
+
+%Load parameters
+%Q=parameters(4,:); %Q variabile secondo il modello stratigrafico
+off=offset;%parameters(2,1):parameters(2,2):parameters(2,3);
+%s=parameters(3,:);
+c=Vp;%parameters(1,:);
+
+%clear parameters;
+
+%Creazione forma d'onda
+[wavelet,tw]=rickercrew(fdom,dt);
+wavelet=wavelet./max(wavelet); %normalizzata al max
+
+%ampiezza della forma d'onda - deve essere scelta in funzione del rumore in
+%modo da rispettare criterio di Neyman-Pearson
+
+A=20;
+wavelet=A*wavelet;
+
+rfile='Traveltime.mat';
+wfile='CSG.mat';
+
+
+[flag]=creaCSG(rfile,wfile,wavelet,fc,Q);
+
+if(flag==0)
+    disp('CSG calcolato.');
+else
+    disp('Problema: CSG non calcolato.');
+end
+
+%Calcolo dei traveltime
+% tic;
+% [TT]=traveltime(c,s,off);
+% toc;
+% disp('Ho calcolato i Traveltime...');
+
+
+%Salva video del cubo di acquisizione (Frequenza,tempo,Offset)
+
+% Nfft=pow2(round(log2(length(t))));
+% ovl=0.5;
+% Nwin=fix(((1/fdom)*4)*fc);
+% 
+% win=window(@hamming,Nwin);
+% 
+% [aviobj]=video(sr,t,win,Nfft,ovl);
+
+
+%Mostra video del cubo di acquisizione, nel dominio (Ampiezza,tempo), al variare dell'offset 
+
+% hh=figure,
+% m_ax=max(max(sr));
+% mi_ax=min(min(sr));
+% ma_t=max(t);
+% mi_t=min(t);
+% for kk=1:size(sr,2)
+%     
+%     cla(hh);
+%     plot(t,sr(:,kk),'k'),axis([mi_t ma_t mi_ax m_ax]),...
+%     xlabel('Tempo [s]'),ylabel('Ampiezza'),...
+%     title('Evoluzione temporale al variare dell'' offset delle tracce');
+%     
+%     M(kk)=getframe;
+% end
+% 
+% movie(M)
+
+

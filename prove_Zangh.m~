@@ -1,0 +1,177 @@
+%% Prove articolo Zhang - Estimation of Quality Factor by Nonlinear Inv
+
+clear all;
+close all;
+clc;
+
+addpath('/geodata10/pintus/MYLibrary/Matlab_Lib/Geofisica/'),
+addpath('/geoscratch/workgroup/Local_Attributes/Software/Matlab/Attributi_codici'),
+addpath('/geoscratch/workgroup/Local_Attributes/Software/Matlab/Q_factor_codici')
+
+
+% Modello di velocità : costante
+% Modello di Q: spazio variante 1D
+% Sorgente : Ricker wavelet con fdom=15 Hz
+%
+% STEP:
+%
+% 1) Definisco v0, fc, la sorgente e l'asse temporale lungo la durata
+% dell'osservazione campionato a fc, creo asse delle frequenze dell'ondina
+% 2) Creo l'asse delle profondità z, che ha dipendenza lineare da t
+% 3) Creo profilo di Q lungo z
+% 4) Creo matrice dei numeri d'onda coinvolti nella propagazione, essi
+% cambiano con 2 gradi di libertà (matrice):
+% - Q variante in z
+% - f variante
+% dunque si definisce un vettore dei numeri d'onda per ogni variazione di Q
+% nel mezzo --> matrice (in genere rettangolare, il numero di colonne è il numero 
+% di campioni FFT, ai quali corrisponde una frequenza discreta che accende un numero 
+% d'onda; il numero di righe dipende dal numero di variazioni di Q lungo il profilo 
+% di profondità)
+% 5) Creo il filtro exp(j*k*z), che fa queste operazioni:
+% - sfasa spazialmente ogni frequenza del campo (Onda Piana) (definito in frequenza per il momento)
+% dell'ammontare in radianti corrispondente ai metri percorsi (z)
+% normalizzati alla lunghezza d'onda corrispondente alla frequenza sotto
+% analisi (v0/f=lambda(f))
+% - Attenua l'ampiezza dell'OP di un termine esponenziale negativo che
+% dipende da Q in quello strato, dalla velocità e dalla distanza percorsa
+% - aggiunge un ritardo di fase non lineare in frequenza, e dunque sfasa in
+% modo differente le diverse OP a seconda della loro posizione in frequenza
+% Questo filtro sarà definito in frequenza per ogni "strato" nel quale è
+% definito un diverso Q.
+% 6) Definito il campo in z=0, ed in frequenza, è possibile estrapolare il
+% suo valore ad una nuova profondità, continuando ad applicare il filtro,
+% per passi in profondità pari a dz (che corrisponde anche alla risoluzione
+% con la quale voglio riottenere il profilo di Q dall'inversione)
+% 7) Definito il campo nel dominio (z,f), su tutto lo spazio z, posso
+% procedere usando il teorema dei valori iniziali allo stack lungo la
+% dimensione f, per ottenere i valori del campo in t=0, in tutto lo spazio
+% z
+% 8) Per testare di aver fatto le cose bene, potrei fare un video dove
+% faccio propagare il campo nel tempo, sfasando temporalmente ogni onda
+% piana risultante dalla decomposizione del campo, per vari t
+
+%Punto 1
+
+v0=1000;
+fdom=15;
+fc=8*fdom;
+dt=1/fc;
+Nt=400;
+dur=(Nt-1)*dt;
+t=(0:dt:dur)'; %vertical traveltime
+
+[wcaus,tw]=rickercrew(dt,fdom,dur);
+
+% figure,plot(wcaus),title('Ondina causale'),xlabel('# campione'),...
+%     ylabel('Ampiezza'),
+
+wanti=[wcaus(Nt/2+1:end);wcaus(1:Nt/2)];
+
+% figure,plot(wanti),title('Ondina Anticausale'),xlabel('# campione'),...
+%     ylabel('Ampiezza'),
+
+Nfft=Nt;%2^(ceil(log2(Nt)));
+
+%asse delle frequenze
+semifax=(0:Nfft/2)'*(fc/Nfft); %semiasse positivo
+compfax=[-flipud(semifax(2:end-1));semifax]; %asse completo
+semiwax=(2*pi)*semifax;
+compwax=(2*pi)*compfax;
+
+%Definizione spettro ondina causale
+
+%Wc=fft(wcaus,Nfft);
+% figure,subplot(2,1,1),plot(semifax,abs(Wc(1:Nfft/2+1))),...
+%     xlabel('Frequenza [Hz]'),ylabel('Ampiezza'),...
+%     subplot(2,1,2),plot(semifax,angle(Wc(1:Nfft/2+1))),...
+%     title('Lo spettro non è a fase zero - causale'),...
+%     xlabel('Frequenza [Hz]'),ylabel('Fase [rad]'),
+
+%Definizione spettro ondina anticausale
+
+Wa=fftshift(fft(wanti,Nfft));
+% figure,subplot(2,1,1),plot(semifax,abs(Wa(1:Nfft/2+1))),...
+%     xlabel('Frequenza [Hz]'),ylabel('Ampiezza'),...
+%     subplot(2,1,2),plot(semifax,angle(Wa(1:Nfft/2+1))),...
+%     title('Lo spettro è a fase zero - anticausale'),...
+%     xlabel('Frequenza [Hz]'),ylabel('Fase [rad]'),
+
+%Punto 2
+%in questo caso Nz=Nt
+
+z=(v0/2)*t;
+dz=z(2)-z(1);
+Nz=length(z);
+
+%Punto 3
+
+%2 strati con Q diverso
+
+Q=zeros(size(z)); %inizializzo
+Q(1:end/2)=100;
+Q(end/2+1:end)=500;
+
+%Punto 4
+% con 2 strati, la matrice sarà 2xNfft
+
+for i=1:Nz
+    %rimuovo momentaneamente la componente del filtro dovuta allo
+    %sfasamento spaziale dell'onda piana : (compwax/v0)
+    k(i,:)= - (1/(pi*Q(i)*v0))*compwax.*log(compwax./(2*pi*fdom)) + 1i*(1/(2*Q(i)*v0))*compwax;
+end
+
+%Rimuovo i NaN a frequenza zero
+k(isnan(k))=0;
+
+%Punto 5
+% Versione 1: filtro fatto passo passo
+
+fil=zeros(Nz,Nfft);
+for i=1:Nz
+    fil(i,:)=exp(1i*k(i,:)*dz).*exp(1i*(compwax'/v0)*dz);
+end
+
+figure,subplot(1,2,1),imagesc(compfax,z,abs(fil)),...
+    title('Modulo dello spettro del filtro spazio variante (frequenza-Q variante)'),...
+    xlabel('Frequenza [Hz]'),ylabel('Profondità [m]'),colorbar,...
+    subplot(1,2,2),imagesc(compfax,z,angle(fil)),...
+    title('Fase dello spettro del filtro spazio variante (frequenza-Q variante)'),...
+    xlabel('Frequenza [Hz]'),ylabel('Profondità [m]'),colorbar,...
+    
+%Versione 2: filtro con integratore causale per costruire ogni riga in profondità
+
+%Punto 6
+%Calcolo il campo in (z,w); il campo in (z=0,w) è definito dall'insieme di
+%onde piane con fase e ampiezza corrispondenti a fase e ampiezza dello
+%spettro dell'ondina (uso ondina anticausale)
+
+%Primo passo
+U(1,:)=Wa;
+
+%Estrapolazione in basso
+for i=2:Nz
+    U(i,:)=U(i-1,:).*fil(i,:);
+end
+
+figure,subplot(1,2,1),...
+    imagesc(compfax,z,abs(U)),...
+    title('Campo d''onda nel dominio (z,f) - Modulo'),...
+    xlabel('Frequenza [Hz]'),ylabel('Profondità [m]'),colorbar,...
+    subplot(1,2,2),...
+    imagesc(compfax,z,angle(U)),...
+    title('Campo d''onda nel dominio (z,f) - Fase'),...
+    xlabel('Frequenza [Hz]'),ylabel('Profondità [m]'),colorbar,...
+    
+%Punto 7
+% stack lungo f per ottenere il campo d'onda in (t=0,z) (1D)
+dw=abs(semiwax(2)-semiwax(1));
+Ut(1,:)=sum(U,2)*dw;
+
+figure,plot(t,Ut),title('Campo d''onda nel dominio (t=0,z)'),...
+    xlabel('Tempo [s]'),ylabel('Ampiezza')
+
+%Altro modo
+Amat=
+
+%Punto 8

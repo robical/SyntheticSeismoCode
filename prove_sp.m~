@@ -1,0 +1,42 @@
+%% Prove aliasing spaziale
+
+clear all;
+close all;
+clc;
+
+dx=2*1e-2;
+dz=1e-2;
+
+fcx=1/dx; %freq campionamento spaziale in x
+fcz=1/dz; %freq campionamento spaziale in z
+
+c=3*1e3; %mezzo omogeneo, velocità
+
+x=0:dx:2;
+z=0:-dz:-5;
+
+[X,Z]=meshgrid(x,z);
+
+%numeri d'onda di cut-off della griglia spaziale
+
+kx_Ny=(2*pi*(fcx/2))/c;
+kz_Ny=(2*pi*(fcz/2))/c;
+
+%numero d'onda di cut-off della griglia
+
+k_Ny=sqrt(kx_Ny^2+kz_Ny^2); %per ogni direzione
+
+%tettoia
+f=30;
+w=2*pi*f;
+
+k_tet=(w/c);
+
+kx=(w/c)*sin(the);
+kz=(w/c)*cos(the);
+
+tet=exp(-1i*(kx*X+kz*Z));
+
+figure,mesh(X,Z,real(tet))
+
+k_Ny
